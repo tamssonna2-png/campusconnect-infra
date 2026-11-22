@@ -3,6 +3,6 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5433/auth_db
+    url: jdbc:postgresql://localhost:${POSTGRES_AUTH_PORT:5433}/${POSTGRES_AUTH_DB:auth_db}
     username: ${POSTGRES_AUTH_USER:campus_auth}
     password: ${POSTGRES_AUTH_PASSWORD:auth_password_dev}

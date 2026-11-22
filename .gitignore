@@ -9,4 +9,7 @@ target/
 .settings/
 bin/
 *.log
-*.jar
+*.jar.DS_Store
+*.iml
+audit_campusconnect.txt
+campusconnect-infra-all.txt
