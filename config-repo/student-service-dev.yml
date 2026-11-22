@@ -1,0 +1,6 @@
+server:
+  port: 8002
+
+eureka:
+  client:
+    enabled: false
