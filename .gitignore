@@ -1,7 +1,12 @@
 .env
+.env.*
+!.env.example
 target/
-**/target/
 .idea/
-*.iml
 .vscode/
-.DS_Store
+.classpath
+.project
+.settings/
+bin/
+*.log
+*.jar

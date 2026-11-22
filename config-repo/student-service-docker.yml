@@ -1,0 +1,5 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-student:5432/student_db
+    username: ${POSTGRES_STUDENT_USER:campus_student}
+    password: ${POSTGRES_STUDENT_PASSWORD:student_password_dev}

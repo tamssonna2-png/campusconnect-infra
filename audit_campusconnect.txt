@@ -1,0 +1,356 @@
+=== FILE: .env.example ===
+POSTGRES_AUTH_PORT=5433
+POSTGRES_STUDENT_PORT=5434
+KAFKA_PORT=9092
+EUREKA_SERVER_PORT=8761
+CONFIG_SERVER_PORT=8888
+
+AUTH_DB_NAME=auth_db
+AUTH_DB_USER=campus_auth
+AUTH_DB_PASSWORD=auth_password_dev
+
+STUDENT_DB_NAME=student_db
+STUDENT_DB_USER=campus_student
+STUDENT_DB_PASSWORD=student_password_dev
+
+KAFKA_CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk
+KAFKA_ADVERTISED_HOST=kafka
+KAFKA_ADVERTISED_PORT=9092
+
+CONFIG_GIT_URI=file:///config-repo
+CONFIG_GIT_DEFAULT_LABEL=main
+
+SPRING_ACTIVE_PROFILE=dev
+EUREKA_CLIENT_DEFAULT_ZONE=http://eureka-server:8761/eureka/
+
+=== FILE: .gitignore ===
+.env
+target/
+**/target/
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+=== FILE: docker-compose.yml ===
+services:
+  postgres-auth:
+    image: postgres:16-alpine
+    container_name: campus-postgres-auth
+    environment:
+      POSTGRES_DB: ${AUTH_DB_NAME:-auth_db}
+      POSTGRES_USER: ${AUTH_DB_USER:-campus_auth}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:-auth_password_dev}
+    ports:
+      - "${POSTGRES_AUTH_PORT:-5433}:5432"
+    volumes:
+      - pg_auth_data:/var/lib/postgresql/data
+    networks:
+      - campus-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER:-campus_auth} -d ${AUTH_DB_NAME:-auth_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-student:
+    image: postgres:16-alpine
+    container_name: campus-postgres-student
+    environment:
+      POSTGRES_DB: ${STUDENT_DB_NAME:-student_db}
+      POSTGRES_USER: ${STUDENT_DB_USER:-campus_student}
+      POSTGRES_PASSWORD: ${STUDENT_DB_PASSWORD:-student_password_dev}
+    ports:
+      - "${POSTGRES_STUDENT_PORT:-5434}:5432"
+    volumes:
+      - pg_student_data:/var/lib/postgresql/data
+    networks:
+      - campus-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${STUDENT_DB_USER:-campus_student} -d ${STUDENT_DB_NAME:-student_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: apache/kafka:3.8.1
+    container_name: campus-kafka
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${KAFKA_ADVERTISED_HOST:-kafka}:${KAFKA_ADVERTISED_PORT:-9092}
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:-MkU3OEVBNTcwNTJENDM2Qk}
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - campus-net
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  eureka-server:
+    build:
+      context: ./eureka-server
+    container_name: campus-eureka-server
+    ports:
+      - "${EUREKA_SERVER_PORT:-8761}:8761"
+    networks:
+      - campus-net
+
+  config-server:
+    build:
+      context: ./config-server
+    container_name: campus-config-server
+    ports:
+      - "${CONFIG_SERVER_PORT:-8888}:8888"
+    environment:
+      SPRING_CLOUD_CONFIG_SERVER_GIT_URI: ${CONFIG_GIT_URI:-file:///config-repo}
+      SPRING_CLOUD_CONFIG_SERVER_GIT_DEFAULT_LABEL: ${CONFIG_GIT_DEFAULT_LABEL:-main}
+    volumes:
+      - ./config-repo:/config-repo
+    networks:
+      - campus-net
+
+networks:
+  campus-net:
+    driver: bridge
+
+volumes:
+  pg_auth_data:
+  pg_student_data:
+  kafka_data:
+
+=== FILE: config-server/Dockerfile ===
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY target/*.jar app.jar
+EXPOSE 8888
+ENTRYPOINT ["java", "-jar", "app.jar"]
+
+=== FILE: config-server/pom.xml ===
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.3.5</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>com.campusconnect</groupId>
+  <artifactId>config-server</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <name>config-server</name>
+  <description>Spring Cloud Config Server for CampusConnect</description>
+
+  <properties>
+    <java.version>21</java.version>
+    <spring-cloud.version>2023.0.3</spring-cloud.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-config-server</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+  </dependencies>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-dependencies</artifactId>
+        <version>${spring-cloud.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+
+=== FILE: config-server/src/main/resources/application.yml ===
+server:
+  port: 8888
+
+spring:
+  application:
+    name: config-server
+  cloud:
+    config:
+      server:
+        git:
+          uri: file:///home/tamekem/Bureau/school/master_1/semestre_1/INF4057/TP_CampusConnect/config-repo
+          default-label: main
+
+=== FILE: config-server/src/main/java/com/campusconnect/config/ConfigServerApplication.java ===
+package com.campusconnect.config;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.config.server.EnableConfigServer;
+
+@SpringBootApplication
+@EnableConfigServer
+public class ConfigServerApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ConfigServerApplication.class, args);
+    }
+}
+
+=== FILE: eureka-server/Dockerfile ===
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY target/*.jar app.jar
+EXPOSE 8761
+ENTRYPOINT ["java", "-jar", "app.jar"]
+
+=== FILE: eureka-server/pom.xml ===
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.3.5</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>com.campusconnect</groupId>
+  <artifactId>eureka-server</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <name>eureka-server</name>
+  <description>Eureka Service Registry for CampusConnect</description>
+
+  <properties>
+    <java.version>21</java.version>
+    <spring-cloud.version>2023.0.3</spring-cloud.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
+    </dependency>
+  </dependencies>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-dependencies</artifactId>
+        <version>${spring-cloud.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+
+=== FILE: eureka-server/src/main/resources/application.yml ===
+server:
+  port: 8761
+
+spring:
+  application:
+    name: eureka-server
+
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
+
+=== FILE: eureka-server/src/main/java/com/campusconnect/eureka/EurekaServerApplication.java ===
+package com.campusconnect.eureka;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.netflix.eureka.server.EnableEurekaServer;
+
+@SpringBootApplication
+@EnableEurekaServer
+public class EurekaServerApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(EurekaServerApplication.class, args);
+    }
+}
+
+=== FILE: config-repo/application.yml ===
+spring:
+  profiles:
+    active: ${SPRING_ACTIVE_PROFILE:dev}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_DEFAULT_ZONE:http://eureka-server:8761/eureka/}
+
+=== FILE: config-repo/auth-service-dev.yml ===
+server:
+  port: 8001
+
+eureka:
+  client:
+    enabled: false
+
+=== FILE: config-repo/gateway-dev.yml ===
+server:
+  port: 8080
+
+eureka:
+  client:
+    enabled: false
+
+=== FILE: config-repo/student-service-dev.yml ===
+server:
+  port: 8002
+
+eureka:
+  client:
+    enabled: false
+

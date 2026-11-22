@@ -4,9 +4,10 @@ server:
 spring:
   application:
     name: config-server
+  profiles:
+    active: native
   cloud:
     config:
       server:
-        git:
-          uri: file:///home/tamekem/Bureau/school/master_1/semestre_1/INF4057/TP_CampusConnect/config-repo
-          default-label: main
+        native:
+          search-locations: ${CONFIG_REPO_LOCATION:file:/config-repo}
