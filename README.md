@@ -196,3 +196,24 @@ campusconnect-infra/
 ```
 
 Contact : membre 1 (infrastructure).
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Checklist rapide pour `auth-service` et `student-service`
+
+- **Dépendances Maven** : ajoutez `spring-cloud-starter-config`, `spring-cloud-starter-netflix-eureka-client`, `spring-boot-starter-data-jpa` et `postgresql` (en plus de `spring-boot-starter-web` / `spring-kafka` selon vos besoins).
+- **Ne dupliquez pas la config** : laissez le Config Server gérer `server.port` (`8001` pour `auth-service`, `8002` pour `student-service`), `spring.datasource.*`, `eureka.*` et `spring.kafka.*`.
+- **Préfixe des routes** : les contrôleurs de `auth-service` doivent être sous `/auth/...` et ceux de `student-service` sous `/students/...` (le Gateway transmet `/auth/**` et `/students/**` sans retirer le préfixe).
+- **Tester son branchement** :
+  1. Vérifier que la config est bien servie : `curl -s http://localhost:8888/student-service/dev`
+  2. Vérifier la présence dans Eureka : http://localhost:8761
